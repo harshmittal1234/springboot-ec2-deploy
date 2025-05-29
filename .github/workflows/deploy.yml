@@ -7,19 +7,18 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15  # Prevents GitHub from killing long jobs
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up JDK 17
+      - name: Set up JDK
         uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build with Maven (skip tests)
+      - name: Build with Maven
         run: mvn clean package -DskipTests
 
       - name: Copy JAR to EC2
@@ -29,37 +28,31 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
           source: "target/*.jar"
-          target: "~/springboot-app/"
+          target: "~/springboot-app/app.jar"
 
-      - name: Restart Spring Boot App on EC2
+      - name: Start Spring Boot app on EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
           script: |
-            echo "=== Killing any running Spring Boot process ==="
-            PID=$(pgrep -f 'java -jar')
-            if [ ! -z "$PID" ]; then
-              echo "Found running process at PID: $PID"
+            echo "Checking for existing app process..."
+            PID=$(pgrep -f 'java -jar ~/springboot-app/app.jar') || true
+            if [ -n "$PID" ]; then
+              echo "Stopping existing app with PID $PID"
               kill $PID
-              echo "Killed process $PID"
-              sleep 3
+              sleep 5
             else
-              echo "No running Spring Boot process found."
+              echo "No running app found."
             fi
 
-            echo "=== Preparing JAR ==="
-            JAR_FILE=$(ls ~/springboot-app/*.jar | head -n 1)
-            mv "$JAR_FILE" ~/springboot-app/app.jar
-            echo "Using app.jar for startup"
-
-            echo "=== Starting new Spring Boot app ==="
+            echo "Starting Spring Boot app..."
             nohup java -jar ~/springboot-app/app.jar > ~/springboot-app/app.log 2>&1 &
+            echo "App started."
 
-            echo "Sleeping 5 seconds for app to boot..."
             sleep 5
-
-            echo "=== Tailing app.log ==="
+            echo "Last 20 lines of app.log:"
             tail -n 20 ~/springboot-app/app.log
+
 
