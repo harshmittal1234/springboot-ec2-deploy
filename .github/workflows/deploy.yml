@@ -12,7 +12,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up JDK 17
+      - name: Set up JDK
         uses: actions/setup-java@v3
         with:
           java-version: '17'
@@ -21,6 +21,14 @@ jobs:
       - name: Build with Maven
         run: mvn clean package -DskipTests
 
+      - name: Create target directory on EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: mkdir -p ~/springboot-app/target
+
       - name: Copy JAR to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -28,7 +36,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
           source: "target/*.jar"
-          target: "~/springboot-app/app.jar"
+          target: "~/springboot-app/target"
 
       - name: Restart Spring Boot app on EC2
         uses: appleboy/ssh-action@v1.0.0
@@ -37,9 +45,8 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
           script: |
-            APP_PATH="$HOME/springboot-app/app.jar"
             echo "Checking for existing app process..."
-            PID=$(pgrep -f "java -jar $APP_PATH") || true
+            PID=$(pgrep -f 'java -jar') || true
             if [ -n "$PID" ]; then
               echo "Stopping existing app with PID $PID"
               kill $PID
@@ -49,17 +56,13 @@ jobs:
             fi
 
             echo "Starting Spring Boot app..."
-            nohup java -jar $APP_PATH > $HOME/springboot-app/app.log 2>&1 &
-            sleep 2
-            NEW_PID=$(pgrep -f "java -jar $APP_PATH" || true)
-            if [ -n "$NEW_PID" ]; then
-              echo "App started successfully with PID $NEW_PID"
-            else
-              echo "Failed to start app!"
-            fi
+            JAR_FILE=$(ls ~/springboot-app/target/*.jar | head -n 1)
+            nohup java -jar "$JAR_FILE" > ~/springboot-app/app.log 2>&1 &
+            echo "App started."
 
+            sleep 5
             echo "Last 20 lines of app.log:"
-            tail -n 20 $HOME/springboot-app/app.log
+            tail -n 20 ~/springboot-app/app.log
 
 
 
