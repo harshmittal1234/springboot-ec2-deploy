@@ -50,9 +50,6 @@ jobs:
           source: "target/*.jar"
           target: "~/springboot-app/target"
 
-      - name: Wait briefly before restarting
-        run: sleep 3
-
       - name: Restart Spring Boot app on EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -74,12 +71,6 @@ jobs:
             JAR_FILE=$(ls ~/springboot-app/target/*.jar | head -n 1)
             if [ -f "$JAR_FILE" ]; then
               nohup java -jar "$JAR_FILE" > ~/springboot-app/app.log 2>&1 &
-              APP_PID=$!
-              sleep 5
-              echo "Last 20 lines of app.log:"
-              tail -n 20 ~/springboot-app/app.log
-              wait $APP_PID
-
               echo "App started."
             else
               echo "ERROR: JAR file not found!"
@@ -89,4 +80,3 @@ jobs:
             sleep 5
             echo "Last 20 lines of app.log:"
             tail -n 20 ~/springboot-app/app.log
-
