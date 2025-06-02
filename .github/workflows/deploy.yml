@@ -50,6 +50,9 @@ jobs:
           source: "target/*.jar"
           target: "~/springboot-app/target"
 
+      - name: Wait briefly before restarting
+        run: sleep 3
+
       - name: Restart Spring Boot app on EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -70,8 +73,10 @@ jobs:
             echo "Starting Spring Boot app..."
             JAR_FILE=$(ls ~/springboot-app/target/*.jar | head -n 1)
             if [ -f "$JAR_FILE" ]; then
-              nohup java -jar "$JAR_FILE" > ~/springboot-app/app.log 2>&1 &
-              echo "App started."
+              cd ~/springboot-app/target
+              setsid nohup java -jar "$JAR_FILE" > ../app.log 2>&1 < /dev/null &
+              disown
+              echo "App started and detached."
             else
               echo "ERROR: JAR file not found!"
               exit 1
@@ -80,3 +85,20 @@ jobs:
             sleep 5
             echo "Last 20 lines of app.log:"
             tail -n 20 ~/springboot-app/app.log
+
+            echo "Performing health check on http://localhost:8080..."
+            for i in {1..10}; do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080)
+              if [ "$STATUS" == "200" ]; then
+                echo "✅ Health check passed. App is running."
+                break
+              else
+                echo "Waiting for app... (HTTP $STATUS)"
+                sleep 3
+              fi
+
+              if [ "$i" -eq 10 ]; then
+                echo "❌ Health check failed. App did not respond on port 8080."
+                exit 1
+              fi
+            done
