@@ -74,6 +74,12 @@ jobs:
             JAR_FILE=$(ls ~/springboot-app/target/*.jar | head -n 1)
             if [ -f "$JAR_FILE" ]; then
               nohup java -jar "$JAR_FILE" > ~/springboot-app/app.log 2>&1 &
+APP_PID=$!
+sleep 5
+echo "Last 20 lines of app.log:"
+tail -n 20 ~/springboot-app/app.log
+wait $APP_PID
+
               echo "App started."
             else
               echo "ERROR: JAR file not found!"
